@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Maze Pathfinder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overscroll-behavior: none; /* Prevents pull-to-refresh on mobile */
+        }
+        .grid-cell {
+            width: 25px;
+            height: 25px;
+            border: 1px solid #e2e8f0; /* cool-gray-200 */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: background-color 0.2s ease-in-out;
+        }
+        .grid-cell.wall {
+            background-color: #374151; /* gray-700 */
+        }
+        .grid-cell.start {
+            background-color: #10b981; /* emerald-500 */
+            color: white;
+        }
+        .grid-cell.end {
+            background-color: #ef4444; /* red-500 */
+            color: white;
+        }
+        .grid-cell.path {
+            background-color: #3b82f6; /* blue-500 */
+            animation: pulsePath 0.8s infinite alternate;
+        }
+        .grid-cell.visited {
+            background-color: #a5f3fc; /* cyan-200 */
+            animation: pulseVisited 1.5s;
+        }
+        .grid-cell.exploring {
+            background-color: #fde047; /* yellow-300 */
+        }
+
+        @keyframes pulsePath {
+            from { opacity: 0.7; }
+            to { opacity: 1; }
+        }
+        @keyframes pulseVisited {
+            0% { background-color: #e0f2fe; /* sky-100 */ } /* Light blue for visited */
+            50% { background-color: #bae6fd; /* sky-200 */ }
+            100% { background-color: #a5f3fc; } /* cyan-200, final visited color */
+        }
+
+        /* Ensure buttons are easily tappable on mobile */
+        .control-button {
+            padding: 0.75rem 1.5rem; /* p-3 sm:p-4 */
+            font-size: 0.875rem; /* text-sm sm:text-base */
+        }
+
+        /* Custom message box styles */
+        #message-box {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 1rem 1.5rem;
+            border-radius: 0.5rem; /* rounded-lg */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); /* shadow-lg */
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+            visibility: hidden;
+        }
+        #message-box.show {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(-50%) translateY(0);
+        }
+        #message-box.error {
+            background-color: #fee2e2; /* red-100 */
+            color: #b91c1c; /* red-800 */
+        }
+        #message-box.success {
+            background-color: #d1fae5; /* green-100 */
+            color: #065f46; /* green-800 */
+        }
+        #message-box.info {
+            background-color: #e0f2fe; /* sky-100 */
+            color: #075985; /* sky-800 */
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 flex flex-col items-center min-h-screen p-4">
+
+    <header class="w-full max-w-4xl mb-6 text-center">
+        <h1 class="text-3xl sm:text-4xl font-bold text-sky-600">Interactive Maze Pathfinder</h1>
+        <p class="text-gray-600 mt-1">Visualize pathfinding algorithms in action. Currently using BFS.</p>
+    </header>
+
+    <main class="w-full max-w-4xl bg-white p-4 sm:p-6 rounded-xl shadow-2xl">
+        <div class="controls mb-4 sm:mb-6 p-3 bg-gray-50 rounded-lg shadow">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 items-center">
+                <div>
+                    <label for="tool-select" class="block text-sm font-medium text-gray-700 mb-1">Tool:</label>
+                    <select id="tool-select" class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 text-sm">
+                        <option value="wall">Place Walls</option>
+                        <option value="start">Set Start Point</option>
+                        <option value="end">Set End Point</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="algorithm-select" class="block text-sm font-medium text-gray-700 mb-1">Algorithm:</label>
+                    <select id="algorithm-select" class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-sky-500 focus:border-sky-500 text-sm" disabled>
+                        <option value="bfs" selected>Breadth-First Search (BFS)</option>
+                        </select>
+                </div>
+                 <button id="start-button" class="control-button w-full bg-green-500 hover:bg-green-600 text-white font-semibold rounded-md shadow-md transition duration-150 ease-in-out">Start Search</button>
+                <button id="reset-button" class="control-button w-full bg-red-500 hover:bg-red-600 text-white font-semibold rounded-md shadow-md transition duration-150 ease-in-out">Reset Grid</button>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-3">
+                 <button id="clear-path-button" class="control-button w-full bg-yellow-500 hover:bg-yellow-600 text-white font-semibold rounded-md shadow-md transition duration-150 ease-in-out">Clear Path & Visited</button>
+                 <button id="generate-maze-button" class="control-button w-full bg-purple-500 hover:bg-purple-600 text-white font-semibold rounded-md shadow-md transition duration-150 ease-in-out">Generate Random Maze</button>
+            </div>
+        </div>
+
+        <div id="maze-grid" class="grid gap-0 border border-gray-300 rounded-md overflow-hidden shadow-inner bg-gray-50 select-none mx-auto" style="display: grid; touch-action: none;">
+            </div>
+        
+        <div id="stats-area" class="mt-4 sm:mt-6 p-3 bg-gray-50 rounded-lg shadow text-sm">
+            <p>Path Length: <span id="path-length" class="font-semibold">N/A</span></p>
+            <p>Nodes Explored: <span id="nodes-explored" class="font-semibold">N/A</span></p>
+            <p>Time Taken: <span id="time-taken" class="font-semibold">N/A</span></p>
+        </div>
+    </main>
+
+    <footer class="w-full max-w-4xl mt-8 mb-4 text-center text-sm text-gray-500">
+        <p>Click on cells to set walls, start, or end points. Then, start the search!</p>
+    </footer>
+
+    <div id="message-box" class="">
+        <span id="message-text"></span>
+    </div>
+
+    <script>
+        // --- Configuration ---
+        const GRID_ROWS = 20; // Number of rows in the grid
+        const GRID_COLS = 30; // Number of columns in the grid
+        const ANIMATION_DELAY = 30; // Milliseconds for visualization delay
+
+        // --- DOM Elements ---
+        const mazeGrid = document.getElementById('maze-grid');
+        const toolSelect = document.getElementById('tool-select');
+        const startButton = document.getElementById('start-button');
+        const resetButton = document.getElementById('reset-button');
+        const clearPathButton = document.getElementById('clear-path-button');
+        const generateMazeButton = document.getElementById('generate-maze-button');
+        const pathLengthDisplay = document.getElementById('path-length');
+        const nodesExploredDisplay = document.getElementById('nodes-explored');
+        const timeTakenDisplay = document.getElementById('time-taken');
+        const messageBox = document.getElementById('message-box');
+        const messageText = document.getElementById('message-text');
+
+        // --- State Variables ---
+        let grid = []; // 2D array to represent the maze
+        let startNode = null; // {row, col}
+        let endNode = null; // {row, col}
+        let currentTool = 'wall'; // 'wall', 'start', 'end'
+        let isSearching = false; // Flag to prevent actions during search
+        let isMouseDown = false; // For drawing walls by dragging
+
+        // --- Utility Functions ---
+        function showMessage(text, type = 'info', duration = 3000) {
+            messageText.textContent = text;
+            messageBox.className = `show ${type}`; // 'error', 'success', 'info'
+            setTimeout(() => {
+                messageBox.className = messageBox.className.replace('show', '');
+            }, duration);
+        }
+
+        // --- Grid Initialization ---
+        function createGrid() {
+            mazeGrid.innerHTML = ''; // Clear existing grid
+            grid = [];
+            mazeGrid.style.gridTemplateColumns = `repeat(${GRID_COLS}, 1fr)`;
+            mazeGrid.style.gridTemplateRows = `repeat(${GRID_ROWS}, 1fr)`;
+
+            for (let r = 0; r < GRID_ROWS; r++) {
+                const row = [];
+                for (let c = 0; c < GRID_COLS; c++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('grid-cell');
+                    cell.dataset.row = r;
+                    cell.dataset.col = c;
+                    cell.addEventListener('click', handleCellClick);
+                    cell.addEventListener('mousedown', handleCellMouseDown);
+                    cell.addEventListener('mouseenter', handleCellMouseEnter);
+                    mazeGrid.appendChild(cell);
+                    row.push({
+                        element: cell,
+                        isWall: false,
+                        isStart: false,
+                        isEnd: false,
+                        isPath: false,
+                        isVisited: false,
+                        parent: null // For reconstructing path
+                    });
+                }
+                grid.push(row);
+            }
+            // Add mouseup listener to the document to handle dragging ending outside the grid
+            document.addEventListener('mouseup', () => { isMouseDown = false; });
+        }
+
+        // --- Event Handlers ---
+        function handleCellMouseDown(event) {
+            if (isSearching) return;
+            isMouseDown = true;
+            handleCellInteraction(event.target);
+        }
+
+        function handleCellMouseEnter(event) {
+            if (isSearching || !isMouseDown) return;
+            handleCellInteraction(event.target);
+        }
+        
+        function handleCellClick(event) {
+            if (isSearching) return;
+            // If not dragging, treat click as a single interaction
+            if (!isMouseDown) { // This condition might be redundant if mousedown always precedes click
+                 handleCellInteraction(event.target);
+            }
+        }
+
+        function handleCellInteraction(cellElement) {
+            if (isSearching) return;
+            const r = parseInt(cellElement.dataset.row);
+            const c = parseInt(cellElement.dataset.col);
+            const node = grid[r][c];
+
+            if (currentTool === 'wall') {
+                if (node.isStart || node.isEnd) {
+                    showMessage("Cannot place a wall on start or end point.", "error");
+                    return;
+                }
+                node.isWall = !node.isWall;
+                cellElement.classList.toggle('wall', node.isWall);
+            } else if (currentTool === 'start') {
+                if (node.isWall) {
+                    showMessage("Cannot place start point on a wall.", "error");
+                    return;
+                }
+                if (startNode) {
+                    grid[startNode.row][startNode.col].isStart = false;
+                    grid[startNode.row][startNode.col].element.classList.remove('start');
+                    grid[startNode.row][startNode.col].element.textContent = '';
+                }
+                node.isStart = true;
+                cellElement.classList.add('start');
+                cellElement.textContent = 'S';
+                startNode = { row: r, col: c };
+            } else if (currentTool === 'end') {
+                 if (node.isWall) {
+                    showMessage("Cannot place end point on a wall.", "error");
+                    return;
+                }
+                if (endNode) {
+                    grid[endNode.row][endNode.col].isEnd = false;
+                    grid[endNode.row][endNode.col].element.classList.remove('end');
+                    grid[endNode.row][endNode.col].element.textContent = '';
+                }
+                node.isEnd = true;
+                cellElement.classList.add('end');
+                cellElement.textContent = 'E';
+                endNode = { row: r, col: c };
+            }
+        }
+
+        toolSelect.addEventListener('change', (e) => {
+            currentTool = e.target.value;
+        });
+
+        startButton.addEventListener('click', () => {
+            if (isSearching) {
+                showMessage("Search already in progress.", "info");
+                return;
+            }
+            if (!startNode || !endNode) {
+                showMessage("Please set both start and end points.", "error");
+                return;
+            }
+            clearPathAndVisited(false); // Clear previous path/visited but not stats
+            performBFS();
+        });
+
+        resetButton.addEventListener('click', () => {
+            if (isSearching) {
+                showMessage("Cannot reset while search is in progress. Please wait or implement a stop function.", "error");
+                return;
+            }
+            startNode = null;
+            endNode = null;
+            createGrid(); // Re-creates the grid and resets states
+            resetStats();
+            showMessage("Grid reset.", "info");
+        });
+        
+        clearPathButton.addEventListener('click', () => {
+            if (isSearching) {
+                 showMessage("Cannot clear path while search is in progress.", "error");
+                return;
+            }
+            clearPathAndVisited(true); // Clear previous path/visited and stats
+            showMessage("Path and visited cells cleared.", "info");
+        });
+
+        generateMazeButton.addEventListener('click', () => {
+            if (isSearching) {
+                showMessage("Cannot generate maze while search is in progress.", "error");
+                return;
+            }
+            generateRandomMaze();
+            showMessage("Random maze generated. Set Start/End points.", "info");
+        });
+
+        // --- Pathfinding Logic (BFS) ---
+        async function performBFS() {
+            isSearching = true;
+            startButton.disabled = true;
+            resetButton.disabled = true;
+            clearPathButton.disabled = true;
+            generateMazeButton.disabled = true;
+
+            const startTime = performance.now();
+            let nodesExploredCount = 0;
+
+            const queue = [[startNode.row, startNode.col]];
+            grid[startNode.row][startNode.col].isVisited = true;
+            grid[startNode.row][startNode.col].element.classList.add('exploring'); // Mark start as exploring initially
+            nodesExploredCount++;
+
+            let pathFound = false;
+
+            while (queue.length > 0) {
+                const [r, c] = queue.shift();
+                const currentNode = grid[r][c];
+
+                // Visually mark as visited (after exploring)
+                if (!currentNode.isStart && !currentNode.isEnd) {
+                    currentNode.element.classList.remove('exploring');
+                    currentNode.element.classList.add('visited');
+                }
+                
+                if (r === endNode.row && c === endNode.col) {
+                    pathFound = true;
+                    break; // Found the end node
+                }
+
+                // Explore neighbors (Up, Down, Left, Right)
+                const neighbors = [
+                    [r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]
+                ];
+
+                for (const [nr, nc] of neighbors) {
+                    if (nr >= 0 && nr < GRID_ROWS && nc >= 0 && nc < GRID_COLS) {
+                        const neighborNode = grid[nr][nc];
+                        if (!neighborNode.isWall && !neighborNode.isVisited) {
+                            neighborNode.isVisited = true;
+                            neighborNode.parent = { row: r, col: c };
+                            queue.push([nr, nc]);
+                            nodesExploredCount++;
+                            if (!neighborNode.isEnd && !neighborNode.isStart) { // Don't mark start/end as 'exploring'
+                                neighborNode.element.classList.add('exploring');
+                            }
+                            await new Promise(resolve => setTimeout(resolve, ANIMATION_DELAY)); // Animation delay
+                        }
+                    }
+                }
+            }
+
+            const endTime = performance.now();
+            timeTakenDisplay.textContent = `${(endTime - startTime).toFixed(2)} ms`;
+            nodesExploredDisplay.textContent = nodesExploredCount;
+
+            if (pathFound) {
+                await reconstructPath();
+                showMessage("Path found!", "success");
+            } else {
+                pathLengthDisplay.textContent = "0 (Not Found)";
+                showMessage("No path found to the end point.", "error");
+            }
+            
+            // Clean up exploring class from any remaining cells (e.g. if search ends early)
+            for (let r = 0; r < GRID_ROWS; r++) {
+                for (let c = 0; c < GRID_COLS; c++) {
+                    grid[r][c].element.classList.remove('exploring');
+                }
+            }
+
+            isSearching = false;
+            startButton.disabled = false;
+            resetButton.disabled = false;
+            clearPathButton.disabled = false;
+            generateMazeButton.disabled = false;
+        }
+
+        async function reconstructPath() {
+            let currR = endNode.row;
+            let currC = endNode.col;
+            let pathLength = 0;
+            while (grid[currR][currC].parent) {
+                const parentR = grid[currR][currC].parent.row;
+                const parentC = grid[currR][currC].parent.col;
+                
+                // Don't mark start or end node with 'path' class initially, they have their own styles
+                if (!((currR === endNode.row && currC === endNode.col) || (currR === startNode.row && currC === startNode.col))) {
+                     grid[currR][currC].element.classList.add('path');
+                }
+                // Ensure start and end keep their respective styles
+                if (grid[startNode.row][startNode.col].isStart) grid[startNode.row][startNode.col].element.classList.add('start');
+                if (grid[endNode.row][endNode.col].isEnd) grid[endNode.row][endNode.col].element.classList.add('end');
+
+
+                currR = parentR;
+                currC = parentC;
+                pathLength++;
+                await new Promise(resolve => setTimeout(resolve, ANIMATION_DELAY / 2)); // Animation delay for path
+            }
+            pathLengthDisplay.textContent = pathLength;
+        }
+        
+        function clearPathAndVisited(clearStats = true) {
+            for (let r = 0; r < GRID_ROWS; r++) {
+                for (let c = 0; c < GRID_COLS; c++) {
+                    const node = grid[r][c];
+                    node.isVisited = false;
+                    node.isPath = false;
+                    node.parent = null;
+                    // Keep wall, start, end states
+                    if (!node.isWall && !node.isStart && !node.isEnd) {
+                        node.element.className = 'grid-cell'; // Reset to base
+                    } else if (node.isStart) {
+                        node.element.className = 'grid-cell start';
+                        node.element.textContent = 'S';
+                    } else if (node.isEnd) {
+                        node.element.className = 'grid-cell end';
+                        node.element.textContent = 'E';
+                    } else if (node.isWall) {
+                         node.element.className = 'grid-cell wall';
+                    }
+                }
+            }
+            if (clearStats) {
+                resetStats();
+            }
+        }
+
+        function resetStats() {
+            pathLengthDisplay.textContent = "N/A";
+            nodesExploredDisplay.textContent = "N/A";
+            timeTakenDisplay.textContent = "N/A";
+        }
+
+        // --- Maze Generation (Simple Random Walls) ---
+        function generateRandomMaze() {
+            clearPathAndVisited(true); // Clear existing path/visited and stats
+            
+            // Reset grid but keep start/end if they exist
+            const oldStart = startNode ? {...startNode} : null;
+            const oldEnd = endNode ? {...endNode} : null;
+
+            createGrid(); // This clears startNode and endNode internally
+
+            // Restore start/end if they were set
+            if (oldStart) {
+                startNode = oldStart;
+                grid[startNode.row][startNode.col].isStart = true;
+                grid[startNode.row][startNode.col].element.classList.add('start');
+                grid[startNode.row][startNode.col].element.textContent = 'S';
+            }
+            if (oldEnd) {
+                endNode = oldEnd;
+                grid[endNode.row][endNode.col].isEnd = true;
+                grid[endNode.row][endNode.col].element.classList.add('end');
+                grid[endNode.row][endNode.col].element.textContent = 'E';
+            }
+
+
+            for (let r = 0; r < GRID_ROWS; r++) {
+                for (let c = 0; c < GRID_COLS; c++) {
+                    const node = grid[r][c];
+                    if (node.isStart || node.isEnd) continue; // Don't make start/end walls
+
+                    // Randomly make about 25% of cells walls
+                    if (Math.random() < 0.25) {
+                        node.isWall = true;
+                        node.element.classList.add('wall');
+                    } else {
+                        node.isWall = false;
+                        node.element.classList.remove('wall');
+                    }
+                }
+            }
+        }
+
+
+       
+        window.onload = () => {
+            createGrid();
+            showMessage("Welcome! Select a tool and design your maze, or generate one.", "info", 5000);
+        };
+
+    </script>
+</body>
+</html>
