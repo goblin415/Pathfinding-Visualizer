@@ -3,13 +3,7 @@ A web-based interactive visualizer that demonstrates how different pathfinding a
 🔍 Features
 🎯 Visualizes popular algorithms:
 
-A* Search
-
-Dijkstra’s Algorithm
-
 Breadth-First Search (BFS)
-
-Depth-First Search (DFS)
 
 🧱 Drag & drop walls to create obstacles
 
